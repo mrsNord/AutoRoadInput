@@ -2,7 +2,7 @@ from typing import List
 from dataclasses import dataclass, field
 import copy
 
-SegmentCache = []
+PavementCache = []
 LaneCache = []
 
 
@@ -43,19 +43,26 @@ class Segment:
     '''Object for tracking physical books in a collection.'''
     segmentBegin: float = 0.0
     segmentEnd: float = 0.0
-    isMilePost: bool = False
     pavementType: str = ""
 
     def inputData(self):
         print('')
         self.segmentBegin = sanitised_input("Segment Begin: ", int) 
         self.segmentEnd = sanitised_input("Segment End: ", int)
-        tempMile = sanitised_input("Is this a mile post (Y,N)? ", str.lower, range_=['y', 'n'])
-        if tempMile == 'y':
-            self.isMilePost = True
 
-        self.pavementType = sanitised_input("Pavement Type (enter to end)? ", str)
 
+        self.pavementType = sanitised_input("Pavement Type (blank for using existing)? ", str)
+        if self.pavementType == '' and len(PavementCache) == 0:
+            while self.pavementType == '':
+                self.pavementType = sanitised_input("Pavement Type (blank for using existing)? ", str)
+        if self.pavementType == '':
+            for j in range(len(PavementCache)):
+                print(f'{str(j+1): <{2}}' + ": " + str(PavementCache[j]))
+            PavementCopyNum = sanitised_input("What pavement type should we use (input number)? ", int, 1, len(PavementCache)+1)
+            self.pavementType = PavementCache[PavementCopyNum-1]
+        else:
+            if self.pavementType not in PavementCache:
+                PavementCache.append(self.pavementType)
         
     def processData(self):
         print("Process")
@@ -64,7 +71,7 @@ class Segment:
         print("Output")
 
     def __str__(self):
-        return str(self.segmentBegin) + "," + str(self.segmentEnd) + "," + str(self.isMilePost) + "," + str(self.pavementType)
+        return str(self.segmentBegin) + "," + str(self.segmentEnd) + "," + str(self.pavementType)
 
 @dataclass
 class Lane:
@@ -80,21 +87,8 @@ class Lane:
 
         anotherLane = 'y'
         while anotherLane == 'y' or anotherLane == '':
-            if len(SegmentCache) == 0:
-                inputOld = 'n'
-            else:
-                inputOld = sanitised_input("Should we use existing segment [N]? ", str.lower, range_=['y', 'n', ''])
-
-            if inputOld == 'y':
-                print("Segments: Format (Begin,End,isMile,Type)")
-                for i in range(len(SegmentCache)):
-                    print(f'{str(i+1): <{2}}' + "  : " + str(SegmentCache[i]))
-                segmentCopyNum = sanitised_input("What segment should we use (input number)? ", int, 1, len(SegmentCache)+1)
-                tempSegment = copy.deepcopy(SegmentCache[segmentCopyNum-1])
-            else:
-                tempSegment = Segment()
-                tempSegment.inputData()
-                SegmentCache.append(tempSegment)
+            tempSegment = Segment()
+            tempSegment.inputData()
             self.segments.append(tempSegment)
             anotherLane = sanitised_input("Do you have another segment [Y]? ", str.lower, range_=['y', 'n', ''])
 
@@ -109,7 +103,7 @@ class Lane:
         for x in self.segments:
             myStr += str(x) + "; "
 
-        return "Lane #" + str(self.laneNumber) + "- (Begin,End,isMile,Type) = " + myStr
+        return "Lane #" + str(self.laneNumber) + "- (Begin,End,Type) = " + myStr
 
 @dataclass
 class Highway:
@@ -117,7 +111,9 @@ class Highway:
     name: str = ""
     direction: str = ""
     lanes: list = field(default_factory=list,init=False)
-    laneCount = 0
+    laneCount: int = 0
+    isBiDirection: bool = True
+    isMilePost: bool = False
 
     def __post_init__(self):
         self.lanes = []
@@ -126,6 +122,14 @@ class Highway:
         global LaneCache
         self.name = sanitised_input("Highway Name: ", str)
         self.direction = sanitised_input("Direction: (N,S,E,W): ", str.upper, range_=['N', 'S', 'E', 'W'])
+        inputBi = sanitised_input("Lanes in Both Directions [Y]?: ", str.lower, range_=['y', 'n', ''])
+        if inputBi == 'n':
+            self.isBiDirection = False
+        
+        tempMile = sanitised_input("Are Segments in Miles or Stations (M = Miles, S = Stations)? ", str.lower, range_=['m', 's'])
+        if tempMile == 'm':
+            self.isMilePost = True
+
         self.laneCount = sanitised_input("Number of Lanes: ", int, 1)  
         for i in range(self.laneCount):
             if len(LaneCache) == 0:
