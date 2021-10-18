@@ -10,8 +10,6 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 PavementCache = []
 LaneCache = []
 
-historySession = PromptSession()
-
 class myValidator(Validator):
 
     def __init__(self, type_=None, min_=None, max_=None, range_=None) -> None:
