@@ -111,27 +111,57 @@ class Highway:
     name: str = ""
     direction: str = ""
     lanes: list = field(default_factory=list,init=False)
+    lanesSecondary: list = field(default_factory=list,init=False)
     laneCount: int = 0
+    laneSecondaryCount: int = 0
     isBiDirection: bool = True
+    isBiCopied: bool = True
     isMilePost: bool = False
+
+    S_dirDict = {
+        "N": "S",
+        "S": "N",
+        "E": "W",
+        "W": "E"
+    }
 
     def __post_init__(self):
         self.lanes = []
+        self.lanesSecondary = []
 
     def inputData(self):
         global LaneCache
         self.name = sanitised_input("Highway Name: ", str)
-        self.direction = sanitised_input("Direction: (N,S,E,W): ", str.upper, range_=['N', 'S', 'E', 'W'])
-        inputBi = sanitised_input("Lanes in Both Directions [Y]?: ", str.lower, range_=['y', 'n', ''])
-        if inputBi == 'n':
+        self.direction = sanitised_input("Primary Direction: (N,S,E,W): ", str.upper, range_=['N', 'S', 'E', 'W'])
+        secDir = Highway.S_dirDict[self.direction]
+        tempDirS = self.direction
+        tempBi = sanitised_input("Lanes in Both Directions [Y]?: ", str.lower, range_=['y', 'n', ''])
+        if tempBi == 'n':
             self.isBiDirection = False
+
+        if self.isBiDirection == True:
+            tempBiCopy = sanitised_input("Is Secondary Direction Copied from First [Y]?: ", str.lower, range_=['y', 'n', ''])
+            if tempBiCopy == 'n':
+                
+                self.isBiCopied = False
+            else:
+                tempDirS = self.direction + " & " + secDir
         
         tempMile = sanitised_input("Are Segments in Miles or Stations (M = Miles, S = Stations)? ", str.lower, range_=['m', 's'])
         if tempMile == 'm':
             self.isMilePost = True
 
-        self.laneCount = sanitised_input("Number of Lanes: ", int, 1)  
-        for i in range(self.laneCount):
+        self.__inputLanes(tempDirS,True)
+        if self.isBiCopied == False:
+            self.__inputLanes(secDir,False)
+
+    def __inputLanes(self,direction,isPrimary):
+        tempLaneCount = sanitised_input("Number of Lanes in " + direction +  ": ", int, 1)  
+        if isPrimary == True:
+            self.laneCount = tempLaneCount
+        else:
+            self.laneSecondaryCount = tempLaneCount
+        for i in range(tempLaneCount):
             if len(LaneCache) == 0:
                 inputOld = 'n'
             else:
@@ -146,7 +176,11 @@ class Highway:
                 tempLane = Lane(laneNumber=(i+1))
                 tempLane.inputData()
                 LaneCache.append(tempLane)
-            self.lanes.append(tempLane)
+            if isPrimary == True:
+                self.lanes.append(tempLane)
+            else:
+                self.lanesSecondary.append(tempLane)    
+            
 
     # TODO: Method to do any data processing. IE looking up location on map, finding distances, doing any math...
     # Highway.processData which calls many Lane.processData which calls many Segment.processData. That way we keep small functions that have single "functions". Do the same with outputData.
