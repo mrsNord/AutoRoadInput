@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.validation import Validator, ValidationError
+import pandas as pd
 
 PavementCache = []
 LaneCache = []
@@ -65,6 +66,8 @@ class Segment:
     stationEnd: int = 0
     stationOffBegin: float = 0.0
     stationOffEnd: float = 0.0
+    stationFeetBegin: float = 0.0
+    stationFeetEnd: float = 0.0
     mileBegin: float = 0.0
     mileEnd: float = 0.0
     pavementType: str = ""
@@ -86,12 +89,21 @@ class Segment:
             PavementCache.append(self.pavementType)
         
     def processData(self):
-        if self.isMile == False and self.stInfo.isStationConvert == True:
-            self.mileBegin = ((100*self.stationBegin+self.stationOffBegin) - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
-            self.mileEnd = ((100*self.stationEnd+self.stationOffEnd) - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
+        if self.isMile == False:
+            self.stationFeetBegin = (100*self.stationBegin+self.stationOffBegin)
+            self.stationFeetEnd = (100*self.stationEnd+self.stationOffEnd)
+            if self.stInfo.isStationConvert == True:
+                self.mileBegin = (self.stationFeetBegin - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
+                self.mileEnd = (self.stationFeetEnd - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
         
-    def outputData(self):
-        print("Output")
+    def generateDataFrame(self):
+        tmpDF = pd.DataFrame(index=[0])
+        tmpDF['stationFeetBegin'] = self.stationFeetBegin
+        tmpDF['stationFeetEnd'] = self.stationFeetEnd
+        tmpDF['mileBegin'] = self.mileBegin
+        tmpDF['mileEnd'] = self.mileEnd
+        tmpDF['pavementType'] = self.pavementType
+        return tmpDF
 
     def __str__(self):
         return str(self.mileBegin) + "," + str(self.mileEnd) + "," + str(self.pavementType)
@@ -121,9 +133,14 @@ class Lane:
         for lSegment in self.segments:
             lSegment.processData()
 
-    def outputData(self):
-        print("Output")
-
+    def generateDataFrame(self):
+        laneDF = pd.DataFrame()
+        for lSegment in self.segments:
+            tmpDF = lSegment.generateDataFrame()
+            laneDF = laneDF.append(tmpDF, ignore_index=True)
+        laneDF.insert(0, "laneNumber", self.laneNumber)
+        return laneDF
+        
     def __str__(self):
         myStr = ""
         for x in self.segments:
@@ -144,6 +161,7 @@ class Highway:
     isBiCopied: bool = True
     isMilePost: bool = False
     stInfo: StationInfo = None
+    highwayDF: pd.DataFrame = None
 
     S_dirDict = {
         "N": "S",
@@ -154,7 +172,7 @@ class Highway:
 
     def __post_init__(self):
         self.lanes = []
-        self.lanesSecondary = []
+        self.lanesSecondary = []      
 
     def inputData(self):
         global LaneCache
@@ -207,6 +225,7 @@ class Highway:
                     print(f'{str(j+1): <{2}}' + ": " + str(LaneCache[j]))
                 laneCopyNum = int(prompt("What lane should we use (input number)? ", validator=myValidator(int, 1, len(LaneCache)+1)))
                 tempLane = copy.deepcopy(LaneCache[laneCopyNum-1])
+                tempLane.laneNumber = i+1
             else:
                 tempLane = Lane(self.isMilePost, self.stInfo, laneNumber=(i+1))
                 tempLane.inputData()
@@ -216,32 +235,47 @@ class Highway:
             else:
                 self.lanesSecondary.append(tempLane)    
             
-
-    # TODO: Method to do any data processing. IE looking up location on map, finding distances, doing any math...
-    # Highway.processData which calls many Lane.processData which calls many Segment.processData. That way we keep small functions that have single "functions". Do the same with outputData.
     def processData(self):
         for lLane in self.lanes:
             lLane.processData()
+        if self.isBiDirection == True and self.isBiCopied == False:
+            for lLane in self.lanesSecondary:
+                lLane.processData()
 
-    # TODO: Method to flatten and output data to excel or another format. 
-    # EXAMPLE:
-    # This method takes the following one line and hierarchical data and flattens it into many rows. 
-    # Highway(name='I10', direction='S', lanes=[Lane(laneNumber=1, pavementType='AB', segment=None), Lane(laneNumber=2, pavementType='PS', segment=None), Lane(laneNumber=3, pavementType='HI', segment=None)])
-    # 
-    # Output:
-    # Highway, Direction, LaneNumber, Pavement Type, Segment Start, Segment End, Segment End
-    # I10    , S        , 1         , AB           , None         , None       , None      
-    # I10    , S        , 2         , PS           , None         , None       , None      
-    # I10    , S        , 2         , HI           , None         , None       , None      
+    def generateDataFrame(self):
+        self.highwayDF = pd.DataFrame()
+        for lLane in self.lanes:
+            tmpDF = lLane.generateDataFrame()
+            self.highwayDF = self.highwayDF.append(tmpDF, ignore_index=True)
 
-    def outputData(self):
-        print("Output")
+        if self.isBiDirection == True:
+            secDir = Highway.S_dirDict[self.direction]
+            if self.isBiCopied == True:
+                copiedDF = self.highwayDF.copy()
+                self.highwayDF.insert(0, "direction", self.direction)
+                copiedDF.insert(0, "direction", secDir)
+                self.highwayDF = self.highwayDF.append(copiedDF, ignore_index=True)
+            else:
+                self.highwayDF.insert(0, "direction", self.direction)
+                secondDF = pd.DataFrame()
+                for lLane in self.lanesSecondary:
+                    tmpDF = lLane.generateDataFrame()
+                    secondDF = secondDF.append(tmpDF, ignore_index=True)
+                secondDF.insert(0, "direction", secDir)
+                self.highwayDF = self.highwayDF.append(secondDF, ignore_index=True)
+        self.highwayDF.insert(0, "highway", self.name)
+
+    def writeCSV(self, fileName):
+        if self.highwayDF is not None:
+            self.highwayDF.to_csv(fileName, index=False)
+
+    def writeGoogleSheets(self):
+        print("Output Sheet")
 
 # Main code
 highwayIC = Highway()
 highwayIC.inputData()
 highwayIC.processData()
-
-
-
+highwayIC.generateDataFrame()
+highwayIC.writeCSV(highwayIC.name + "_output.csv")
 print(highwayIC)
