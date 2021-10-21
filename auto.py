@@ -221,7 +221,7 @@ class Highway:
     # Highway.processData which calls many Lane.processData which calls many Segment.processData. That way we keep small functions that have single "functions". Do the same with outputData.
     def processData(self):
         for lLane in self.lanes:
-            iLane.processData()
+            lLane.processData()
 
     # TODO: Method to flatten and output data to excel or another format. 
     # EXAMPLE:
