@@ -1,10 +1,10 @@
+import copy
+import math
 from typing import List
 from dataclasses import dataclass, field
-import copy
 from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.validation import Validator, ValidationError
-from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 PavementCache = []
 LaneCache = []
@@ -240,6 +240,7 @@ class Highway:
 # Main code
 highwayIC = Highway()
 highwayIC.inputData()
+highwayIC.processData()
 
 
 
