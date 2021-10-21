@@ -1,81 +1,106 @@
+import copy
+import math
 from typing import List
 from dataclasses import dataclass, field
-import copy
+from prompt_toolkit import prompt, PromptSession
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.validation import Validator, ValidationError
 
 PavementCache = []
 LaneCache = []
 
+class myValidator(Validator):
 
-def sanitised_input(prompt, type_=None, min_=None, max_=None, range_=None):
-    if min_ is not None and max_ is not None and max_ < min_:
-        raise ValueError("min_ must be less than or equal to max_.")
-    while True:
-        ui = input(prompt)
-        if type_ is not None:
+    def __init__(self, type_=None, min_=None, max_=None, range_=None) -> None:
+        self.type_ = type_
+        self.min_ = min_
+        self.max_ = max_
+        self.range_ = range_
+
+    def validate(self, document):
+        ui = document.text
+
+        if self.type_ is not None:
             try:
-                ui = type_(ui)
+                ui = self.type_(ui)
             except ValueError:
-                print("Input type must be {0}.".format(type_.__name__))
-                continue
-        if max_ is not None and ui > max_:
-            print("Input must be less than or equal to {0}.".format(max_))
-        elif min_ is not None and ui < min_:
-            print("Input must be greater than or equal to {0}.".format(min_))
-        elif range_ is not None and ui not in range_:
-            if isinstance(range_, range):
+                raise ValidationError(message='This input contains non-numeric characters')
+        if self.max_ is not None and ui > self.max_:
+            raise ValidationError(message="Input must be less than or equal to {0}.".format(self.max_))
+        elif self.min_ is not None and ui < self.min_:
+            raise ValidationError(message="Input must be greater than or equal to {0}.".format(self.min_))
+        elif self.range_ is not None and ui not in self.range_:
+            if isinstance(self.range_, range):
                 template = "Input must be between {0.start} and {0.stop}."
-                print(template.format(range_))
+                raise ValidationError(message=template.format(self.range_))
             else:
                 template = "Input must be {0}."
-                if len(range_) == 1:
-                    print(template.format(*range_))
+                if len(self.range_) == 1:
+                    raise ValidationError(message=template.format(*self.range_))
                 else:
                     expected = " or ".join((
-                        ", ".join(str(x) for x in range_[:-1]),
-                        str(range_[-1])
+                        ", ".join(str(x) for x in self.range_[:-1]),
+                        str(self.range_[-1])
                     ))
-                    print(template.format(expected))
-        else:
-            return ui
+                    raise ValidationError(message=template.format(expected))
+
+@dataclass
+class StationInfo:
+    isStationConvert: bool
+    stationRef: float = 0.0
+    stationOffRef: float = 0.0
+    mileRef: float = 0.0
+    
+    def inputData(self):
+        self.stationRef = float(prompt('Station Reference Point: ', validator=myValidator(float,0)))
+        self.stationOffRef = float(prompt('Station Reference Offset Point: ', validator=myValidator(float,0)))
+        self.mileRef = float(prompt('Mile Post Reference: ', validator=myValidator(float,0)))
 
 @dataclass
 class Segment:
     '''Object for tracking physical books in a collection.'''
-    segmentBegin: float = 0.0
-    segmentEnd: float = 0.0
+    isMile: bool
+    stInfo: StationInfo
+    stationBegin: int = 0
+    stationEnd: int = 0
+    stationOffBegin: float = 0.0
+    stationOffEnd: float = 0.0
+    mileBegin: float = 0.0
+    mileEnd: float = 0.0
     pavementType: str = ""
-
+    
     def inputData(self):
         print('')
-        self.segmentBegin = sanitised_input("Segment Begin: ", int) 
-        self.segmentEnd = sanitised_input("Segment End: ", int)
-
-
-        self.pavementType = sanitised_input("Pavement Type (blank for using existing)? ", str)
-        if self.pavementType == '' and len(PavementCache) == 0:
-            while self.pavementType == '':
-                self.pavementType = sanitised_input("Pavement Type (blank for using existing)? ", str)
-        if self.pavementType == '':
-            for j in range(len(PavementCache)):
-                print(f'{str(j+1): <{2}}' + ": " + str(PavementCache[j]))
-            PavementCopyNum = sanitised_input("What pavement type should we use (input number)? ", int, 1, len(PavementCache)+1)
-            self.pavementType = PavementCache[PavementCopyNum-1]
+        if self.isMile == True:
+            self.mileBegin = float(prompt('Mile Post Begin: ', validator=myValidator(float,0)))
+            self.mileEnd = float(prompt('Mile Post End: ', validator=myValidator(float,0)))
         else:
-            if self.pavementType not in PavementCache:
-                PavementCache.append(self.pavementType)
+            self.stationBegin = float(prompt('Station Begin: ', validator=myValidator(float,0)))
+            self.stationOffBegin = float(prompt('Station Offset Begin: ', validator=myValidator(float,0)))
+            self.stationEnd = float(prompt('Station End: ', validator=myValidator(float,0)))
+            self.stationOffEnd = float(prompt('Station Offset End: ', validator=myValidator(float,0)))
+
+        pavementCompleter = WordCompleter(PavementCache, sentence=True, ignore_case=True)
+        self.pavementType = prompt('Pavement Type: ', completer=pavementCompleter, complete_while_typing=True)
+        if self.pavementType not in PavementCache:
+            PavementCache.append(self.pavementType)
         
     def processData(self):
-        print("Process")
+        if self.isMile == False and self.stInfo.isStationConvert == True:
+            self.mileBegin = ((100*self.stationBegin+self.stationOffBegin) - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
+            self.mileEnd = ((100*self.stationEnd+self.stationOffEnd) - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
         
     def outputData(self):
         print("Output")
 
     def __str__(self):
-        return str(self.segmentBegin) + "," + str(self.segmentEnd) + "," + str(self.pavementType)
+        return str(self.mileBegin) + "," + str(self.mileEnd) + "," + str(self.pavementType)
 
 @dataclass
 class Lane:
     '''Object for tracking physical books in a collection.'''
+    isMile: bool
+    stInfo: StationInfo
     laneNumber: int = 0
     segments: list = field(default_factory=list,init=False)
 
@@ -87,13 +112,14 @@ class Lane:
 
         anotherLane = 'y'
         while anotherLane == 'y' or anotherLane == '':
-            tempSegment = Segment()
+            tempSegment = Segment(self.isMile, self.stInfo)
             tempSegment.inputData()
             self.segments.append(tempSegment)
-            anotherLane = sanitised_input("Do you have another segment [Y]? ", str.lower, range_=['y', 'n', ''])
+            anotherLane = str.lower(prompt("Do you have another segment [Y]? ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
 
     def processData(self):
-        print("Process")
+        for lSegment in self.segments:
+            lSegment.processData()
 
     def outputData(self):
         print("Output")
@@ -117,6 +143,7 @@ class Highway:
     isBiDirection: bool = True
     isBiCopied: bool = True
     isMilePost: bool = False
+    stInfo: StationInfo = None
 
     S_dirDict = {
         "N": "S",
@@ -131,32 +158,40 @@ class Highway:
 
     def inputData(self):
         global LaneCache
-        self.name = sanitised_input("Highway Name: ", str)
-        self.direction = sanitised_input("Primary Direction: (N,S,E,W): ", str.upper, range_=['N', 'S', 'E', 'W'])
+        self.name = prompt("Highway Name: ", validator=myValidator(str))
+        self.direction = str.upper(prompt("Primary Direction: (N,S,E,W): ", validator=myValidator(str.upper, range_=['N', 'S', 'E', 'W'])))
         secDir = Highway.S_dirDict[self.direction]
         tempDirS = self.direction
-        tempBi = sanitised_input("Lanes in Both Directions [Y]?: ", str.lower, range_=['y', 'n', ''])
+        tempBi = str.lower(prompt("Lanes in Both Directions [Y]?: ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
         if tempBi == 'n':
             self.isBiDirection = False
 
         if self.isBiDirection == True:
-            tempBiCopy = sanitised_input("Is Secondary Direction Copied from First [Y]?: ", str.lower, range_=['y', 'n', ''])
+            tempBiCopy = str.lower(prompt("Is Secondary Direction Copied from First [Y]?: ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
             if tempBiCopy == 'n':
                 
                 self.isBiCopied = False
             else:
                 tempDirS = self.direction + " & " + secDir
         
-        tempMile = sanitised_input("Are Segments in Miles or Stations (M = Miles, S = Stations)? ", str.lower, range_=['m', 's'])
+        tempMile = str.lower(prompt("Are Segments in Miles or Stations (M = Miles, S = Stations)? ", validator=myValidator(str.lower, range_=['m', 's'])))
         if tempMile == 'm':
             self.isMilePost = True
+
+        if self.isMilePost == False:
+            tempStConv = str.lower(prompt("Would you like to convert Stations (Sta) and Mile Posts (MP) [Y]? ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
+            if tempStConv == "n":
+                self.stInfo = StationInfo(False)
+            else:
+                self.stInfo = StationInfo(True)
+                self.stInfo.inputData()
 
         self.__inputLanes(tempDirS,True)
         if self.isBiCopied == False:
             self.__inputLanes(secDir,False)
 
     def __inputLanes(self,direction,isPrimary):
-        tempLaneCount = sanitised_input("Number of Lanes in " + direction +  ": ", int, 1)  
+        tempLaneCount = int(prompt("Number of Lanes in " + direction +  ": ", validator=myValidator(int, 1)))
         if isPrimary == True:
             self.laneCount = tempLaneCount
         else:
@@ -165,15 +200,15 @@ class Highway:
             if len(LaneCache) == 0:
                 inputOld = 'n'
             else:
-                inputOld = sanitised_input("Should we use existing lane [N]? ", str.lower, range_=['y', 'n', ''])
+                inputOld = str.lower(prompt("Should we use existing lane [N]? ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
 
             if inputOld == 'y':
                 for j in range(len(LaneCache)):
                     print(f'{str(j+1): <{2}}' + ": " + str(LaneCache[j]))
-                laneCopyNum = sanitised_input("What lane should we use (input number)? ", int, 1, len(LaneCache)+1)
+                laneCopyNum = int(prompt("What lane should we use (input number)? ", validator=myValidator(int, 1, len(LaneCache)+1)))
                 tempLane = copy.deepcopy(LaneCache[laneCopyNum-1])
             else:
-                tempLane = Lane(laneNumber=(i+1))
+                tempLane = Lane(self.isMilePost, self.stInfo, laneNumber=(i+1))
                 tempLane.inputData()
                 LaneCache.append(tempLane)
             if isPrimary == True:
@@ -185,7 +220,8 @@ class Highway:
     # TODO: Method to do any data processing. IE looking up location on map, finding distances, doing any math...
     # Highway.processData which calls many Lane.processData which calls many Segment.processData. That way we keep small functions that have single "functions". Do the same with outputData.
     def processData(self):
-        print("Process")
+        for lLane in self.lanes:
+            lLane.processData()
 
     # TODO: Method to flatten and output data to excel or another format. 
     # EXAMPLE:
@@ -204,6 +240,7 @@ class Highway:
 # Main code
 highwayIC = Highway()
 highwayIC.inputData()
+highwayIC.processData()
 
 
 
