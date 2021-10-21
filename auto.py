@@ -86,7 +86,9 @@ class Segment:
             PavementCache.append(self.pavementType)
         
     def processData(self):
-        print("Process")
+        if self.isMile == False and self.stInfo.isStationConvert == True:
+            self.mileBegin = ((100*self.stationBegin+self.stationOffBegin) - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
+            self.mileEnd = ((100*self.stationEnd+self.stationOffEnd) - (100*self.stInfo.stationRef+self.stInfo.stationOffRef))/5280 + self.stInfo.mileRef
         
     def outputData(self):
         print("Output")
@@ -116,7 +118,8 @@ class Lane:
             anotherLane = str.lower(prompt("Do you have another segment [Y]? ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
 
     def processData(self):
-        print("Process")
+        for lSegment in self.segments:
+            lSegment.processData()
 
     def outputData(self):
         print("Output")
@@ -217,7 +220,8 @@ class Highway:
     # TODO: Method to do any data processing. IE looking up location on map, finding distances, doing any math...
     # Highway.processData which calls many Lane.processData which calls many Segment.processData. That way we keep small functions that have single "functions". Do the same with outputData.
     def processData(self):
-        print("Process")
+        for lLane in self.lanes:
+            iLane.processData()
 
     # TODO: Method to flatten and output data to excel or another format. 
     # EXAMPLE:
