@@ -236,6 +236,8 @@ class Highway:
                 self.lanesSecondary.append(tempLane)    
             
     def processData(self):
+        sName = self.name.replace(" ", "")
+        self.name = sName[0] + "  " + sName[1:]
         for lLane in self.lanes:
             lLane.processData()
         if self.isBiDirection == True and self.isBiCopied == False:
