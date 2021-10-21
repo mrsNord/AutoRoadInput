@@ -4,7 +4,6 @@ import copy
 from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.validation import Validator, ValidationError
-from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 PavementCache = []
@@ -46,16 +45,40 @@ class myValidator(Validator):
                     raise ValidationError(message=template.format(expected))
 
 @dataclass
+class StationInfo:
+    isStationConvert: bool
+    stationRef: float = 0.0
+    stationOffRef: float = 0.0
+    mileRef: float = 0.0
+    
+    def inputData(self):
+        self.stationRef = float(prompt('Station Reference Point: ', validator=myValidator(float,0)))
+        self.stationOffRef = float(prompt('Station Reference Offset Point: ', validator=myValidator(float,0)))
+        self.mileRef = float(prompt('Mile Post Reference: ', validator=myValidator(float,0)))
+
+@dataclass
 class Segment:
     '''Object for tracking physical books in a collection.'''
-    segmentBegin: float = 0.0
-    segmentEnd: float = 0.0
+    isMile: bool
+    stInfo: StationInfo
+    stationBegin: int = 0
+    stationEnd: int = 0
+    stationOffBegin: float = 0.0
+    stationOffEnd: float = 0.0
+    mileBegin: float = 0.0
+    mileEnd: float = 0.0
     pavementType: str = ""
-
+    
     def inputData(self):
         print('')
-        self.segmentBegin = float(prompt('Segment Begin: ', validator=myValidator(float)))
-        self.segmentEnd = float(prompt('Segment End: ', validator=myValidator(float)))
+        if self.isMile == True:
+            self.mileBegin = float(prompt('Mile Post Begin: ', validator=myValidator(float,0)))
+            self.mileEnd = float(prompt('Mile Post End: ', validator=myValidator(float,0)))
+        else:
+            self.stationBegin = float(prompt('Station Begin: ', validator=myValidator(float,0)))
+            self.stationOffBegin = float(prompt('Station Offset Begin: ', validator=myValidator(float,0)))
+            self.stationEnd = float(prompt('Station End: ', validator=myValidator(float,0)))
+            self.stationOffEnd = float(prompt('Station Offset End: ', validator=myValidator(float,0)))
 
         pavementCompleter = WordCompleter(PavementCache, sentence=True, ignore_case=True)
         self.pavementType = prompt('Pavement Type: ', completer=pavementCompleter, complete_while_typing=True)
@@ -69,11 +92,13 @@ class Segment:
         print("Output")
 
     def __str__(self):
-        return str(self.segmentBegin) + "," + str(self.segmentEnd) + "," + str(self.pavementType)
+        return str(self.mileBegin) + "," + str(self.mileEnd) + "," + str(self.pavementType)
 
 @dataclass
 class Lane:
     '''Object for tracking physical books in a collection.'''
+    isMile: bool
+    stInfo: StationInfo
     laneNumber: int = 0
     segments: list = field(default_factory=list,init=False)
 
@@ -85,7 +110,7 @@ class Lane:
 
         anotherLane = 'y'
         while anotherLane == 'y' or anotherLane == '':
-            tempSegment = Segment()
+            tempSegment = Segment(self.isMile, self.stInfo)
             tempSegment.inputData()
             self.segments.append(tempSegment)
             anotherLane = str.lower(prompt("Do you have another segment [Y]? ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
@@ -115,6 +140,7 @@ class Highway:
     isBiDirection: bool = True
     isBiCopied: bool = True
     isMilePost: bool = False
+    stInfo: StationInfo = None
 
     S_dirDict = {
         "N": "S",
@@ -149,6 +175,14 @@ class Highway:
         if tempMile == 'm':
             self.isMilePost = True
 
+        if self.isMilePost == False:
+            tempStConv = str.lower(prompt("Would you like to convert Stations (Sta) and Mile Posts (MP) [Y]? ", validator=myValidator(str.lower, range_=['y', 'n', ''])))
+            if tempStConv == "n":
+                self.stInfo = StationInfo(False)
+            else:
+                self.stInfo = StationInfo(True)
+                self.stInfo.inputData()
+
         self.__inputLanes(tempDirS,True)
         if self.isBiCopied == False:
             self.__inputLanes(secDir,False)
@@ -171,7 +205,7 @@ class Highway:
                 laneCopyNum = int(prompt("What lane should we use (input number)? ", validator=myValidator(int, 1, len(LaneCache)+1)))
                 tempLane = copy.deepcopy(LaneCache[laneCopyNum-1])
             else:
-                tempLane = Lane(laneNumber=(i+1))
+                tempLane = Lane(self.isMilePost, self.stInfo, laneNumber=(i+1))
                 tempLane.inputData()
                 LaneCache.append(tempLane)
             if isPrimary == True:
